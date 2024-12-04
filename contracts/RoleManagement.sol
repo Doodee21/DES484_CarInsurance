@@ -12,9 +12,17 @@ contract RoleManagement is AccessControl {
     address[] public admins;
     address[] public users;
 
-    constructor() {
+    constructor(address[] memory initialAdmins) {
         _grantRole(ADMIN_ROLE, msg.sender);
         admins.push(msg.sender);
+
+        // Assign ADMIN_ROLE to all initialAdmins
+        for (uint256 i = 0; i < initialAdmins.length; i++) {
+            if (!_isInList(admins, initialAdmins[i])) {
+                _grantRole(ADMIN_ROLE, initialAdmins[i]);
+                admins.push(initialAdmins[i]);
+            }
+        }
     }
 
     // Add an address to the admins list (only Admins can call this function)
