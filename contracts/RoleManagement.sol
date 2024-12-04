@@ -34,9 +34,9 @@ contract RoleManagement is AccessControl {
         admins.push(account);
     }
 
-
+    // Add an address to the users list
     function addUser(address account) public onlyRole(ADMIN_ROLE) {
-        require(!_isInList(users, account), "Address is already an admin");
+        require(!_isInList(users, account), "Address is already a user");
         _grantRole(POLICY_HOLDER_ROLE, account);
         users.push(account);
     }
@@ -60,6 +60,16 @@ contract RoleManagement is AccessControl {
             }
         }
         return false;
+    }
+
+    // Check if an address is in the admins list
+    function _isInAdmins(address account) external view returns (bool) {
+        return _isInList(admins, account);
+    }
+
+    // Check if an address is in the users list
+    function _isInUsers(address account) external view returns (bool) {
+        return _isInList(users, account);
     }
 
     // Get the role of a specific address
