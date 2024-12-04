@@ -1,74 +1,152 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-contract CarInsuranceClaimProcessing {
+contract CarInsuranceClaimSystem {
+    enum ClaimStatus { Pending, Approved, Rejected } // สถานะคำร้อง
+
     struct Claim {
-        uint id;
-        address policyholder;
-        string accidentDetails; 
-        bool processed; // True if claim is evaluated
-        bool approved;  // True if claim is approved
-        string rejectionReason; // Reason for rejection, if any
-        uint damageAmount; 
+        uint id; // หมายเลขคำร้อง
+        address claimant; // ผู้เสียหายที่ส่งคำร้อง
+        string policy; // ประเภทกรมธรรม์
+        string incidentDate; // วันที่เกิดเหตุ
+        string incidentType; // ประเภทเหตุการณ์
+        string details; // รายละเอียดเพิ่มเติม
+        ClaimStatus status; // Pending, Approved, Rejected
+        string[] ipfsHashes; // Array ของ IPFS Hash หลักฐาน
+        uint timestamp; // เวลาที่ส่งคำร้อง
     }
-    
-    mapping(uint => Claim) public claims;
-    uint public claimCount;
 
-    event ClaimSubmitted(uint claimId, address indexed policyholder);
-    event ClaimEvaluated(uint claimId, bool approved, string rejectionReason);
-    
-    // Constructor to initialize claimCount
+    mapping(uint => Claim) public claims; // เก็บคำร้อง
+    uint public claimCount; // จำนวนคำร้องทั้งหมด
+    mapping(string => bool) public uploadedHashes; // เก็บ Hash ที่เคยอัปโหลดแล้ว
+
+    address public admin; // ที่อยู่ของแอดมินระบบ (Admin)
+
+    event ClaimSubmitted(uint claimId, address indexed claimant, string policy);
+    event ClaimRejected(uint claimId); // Event เมื่อคำร้องถูกปฏิเสธ
+    event ClaimApproved(uint claimId); // Event เมื่อคำร้องได้รับอนุมัติ
+
+    modifier onlyAdmin() {
+        require(msg.sender == admin, "Only admin can perform this action");
+        _;
+    }
+
     constructor() {
-        claimCount = 0; //  start claimCount at 0
+        admin = msg.sender; // ตั้งผู้สร้าง contract เป็นแอดมิน
     }
 
-    function submitClaim(string memory _accidentDetails, uint _damageAmount) public {
-        claimCount++;
-        claims[claimCount] = Claim(claimCount, msg.sender, _accidentDetails, false, false, "", _damageAmount);
-        emit ClaimSubmitted(claimCount, msg.sender);
-    }
+    /// @notice ผู้เสียหายส่งคำร้องพร้อมแนบหลาย IPFS Hash
+    /// @param _policy กรมธรรม์ที่ผู้เสียหายเลือก
+    /// @param _incidentDate วันที่เกิดเหตุ
+    /// @param _incidentType ประเภทของเหตุการณ์
+    /// @param _details รายละเอียดเพิ่มเติม
+    /// @param _ipfsHashes Array ของ IPFS Hash หลักฐาน
+    function submitClaim(
+        string memory _policy,
+        string memory _incidentDate,
+        string memory _incidentType,
+        string memory _details,
+        string[] memory _ipfsHashes
+    ) public {
+        require(bytes(_policy).length > 0, "Policy cannot be empty");
+        require(bytes(_incidentType).length > 0, "Incident type cannot be empty");
+        require(_ipfsHashes.length > 0, "No IPFS hashes provided");
 
-    function evaluateClaim(uint _claimId) public {
-        bool approved = true; // Assume it is approved for the example
-        claims[_claimId].processed = true;
-        claims[_claimId].approved = approved;
-        if (!approved) {
-            claims[_claimId].rejectionReason = "Insufficient evidence"; // Example reason
+        // ตรวจสอบว่าแต่ละ Hash ซ้ำหรือไม่
+        for (uint i = 0; i < _ipfsHashes.length; i++) {
+            if (uploadedHashes[_ipfsHashes[i]]) {
+                claimCount++;
+                claims[claimCount] = Claim({
+                    id: claimCount,
+                    claimant: msg.sender,
+                    policy: _policy,
+                    incidentDate: _incidentDate,
+                    incidentType: _incidentType,
+                    details: _details,
+                    status: ClaimStatus.Rejected, // ปฏิเสธอัตโนมัติ
+                    ipfsHashes: _ipfsHashes,
+                    timestamp: block.timestamp
+                });
+
+                emit ClaimRejected(claimCount); // ส่ง Event ว่าถูกปฏิเสธ
+                return;
+            }
         }
-        emit ClaimEvaluated(_claimId, approved, claims[_claimId].rejectionReason);
+
+        // เพิ่มค่า claimCount ก่อนบันทึกคำร้อง
+        claimCount++;
+        ClaimStatus initialStatus = ClaimStatus.Pending; // สถานะเริ่มต้น
+
+        // ตรวจสอบว่า Incident Type คือ "Own Damage" เพื่ออนุมัติอัตโนมัติ
+        if (keccak256(abi.encodePacked(_incidentType)) == keccak256(abi.encodePacked("Own Damage"))) {
+            initialStatus = ClaimStatus.Approved; // เปลี่ยนสถานะเป็น Approved
+            emit ClaimApproved(claimCount); // ส่ง Event ว่าได้รับอนุมัติ
+        }
+
+        // บันทึกคำร้องใหม่
+        claims[claimCount] = Claim({
+            id: claimCount,
+            claimant: msg.sender,
+            policy: _policy,
+            incidentDate: _incidentDate,
+            incidentType: _incidentType,
+            details: _details,
+            status: initialStatus, // ใช้สถานะจาก initialStatus
+            ipfsHashes: _ipfsHashes,
+            timestamp: block.timestamp
+        });
+
+        // บันทึก Hash ทุกตัวลงระบบ
+        for (uint i = 0; i < _ipfsHashes.length; i++) {
+            uploadedHashes[_ipfsHashes[i]] = true;
+        }
+
+        emit ClaimSubmitted(claimCount, msg.sender, _policy);
     }
 
-    function approveClaim(uint _claimId) public {
-        require(claims[_claimId].processed, "Claim not processed");
-        claims[_claimId].approved = true;
+    /// @notice ฟังก์ชันให้แอดมินตรวจสอบคำร้อง
+    /// @param _claimId หมายเลขคำร้อง
+    /// @param _approvedStatus สถานะคำร้อง (true = อนุมัติ, false = ปฏิเสธ)
+    function reviewClaim(
+        uint _claimId,
+        bool _approvedStatus
+    ) public onlyAdmin {
+        Claim storage claim = claims[_claimId];
+        require(claim.status == ClaimStatus.Pending, "Claim is not in pending state");
+
+        if (_approvedStatus) {
+            claim.status = ClaimStatus.Approved;
+            emit ClaimApproved(_claimId);
+        } else {
+            claim.status = ClaimStatus.Rejected;
+            emit ClaimRejected(_claimId);
+        }
     }
 
-    function rejectClaim(uint _claimId, string memory _reason) public {
-        require(claims[_claimId].processed, "Claim not processed");
-        claims[_claimId].approved = false;
-        claims[_claimId].rejectionReason = _reason;
-    }
-
-    // New getter functions for specific fields
-    function isClaimProcessed(uint _claimId) public view returns (bool) {
-        return claims[_claimId].processed;
-    }
-
-    function isClaimApproved(uint _claimId) public view returns (bool) {
-        return claims[_claimId].approved;
-    }
-
-    function getClaimRejectionReason(uint _claimId) public view returns (string memory) {
-        return claims[_claimId].rejectionReason;
-    }
-
-    function getClaimDamageAmount(uint _claimId) public view returns (uint) {
-        return claims[_claimId].damageAmount;
-    }
-
-    function viewClaimStatus(uint _claimId) public view returns (bool processed, bool approved, string memory reason, uint damageAmount) {
+    function viewClaimStatus(uint _claimId)
+        public
+        view
+        returns (
+            address claimant,
+            string memory policy,
+            string memory incidentDate,
+            string memory incidentType,
+            string memory details,
+            ClaimStatus status,
+            string[] memory ipfsHashes,
+            uint timestamp
+        )
+    {
         Claim memory claim = claims[_claimId];
-        return (claim.processed, claim.approved, claim.rejectionReason, claim.damageAmount);
+        return (
+            claim.claimant,
+            claim.policy,
+            claim.incidentDate,
+            claim.incidentType,
+            claim.details,
+            claim.status,
+            claim.ipfsHashes,
+            claim.timestamp
+        );
     }
 }
