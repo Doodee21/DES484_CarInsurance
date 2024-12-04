@@ -1,12 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import "./RoleManagement.sol";
+
 contract CarInsuranceClaimSystem {
+
+    RoleManagement public roleManagement;
+
     enum ClaimStatus { Pending, Approved, Rejected } // สถานะคำร้อง
 
     struct Claim {
         uint id; // หมายเลขคำร้อง
         address claimant; // ผู้เสียหายที่ส่งคำร้อง
+        string name; // ชื่อของผู้ยื่นคำร้อง
         string policy; // ประเภทกรมธรรม์
         string incidentDate; // วันที่เกิดเหตุ
         string incidentType; // ประเภทเหตุการณ์
@@ -16,38 +22,41 @@ contract CarInsuranceClaimSystem {
         uint timestamp; // เวลาที่ส่งคำร้อง
     }
 
-    mapping(uint => Claim) public claims; // เก็บคำร้อง
+    mapping(uint => Claim) public  claims; // เก็บคำร้อง
     uint public claimCount; // จำนวนคำร้องทั้งหมด
     mapping(string => bool) public uploadedHashes; // เก็บ Hash ที่เคยอัปโหลดแล้ว
 
     address public admin; // ที่อยู่ของแอดมินระบบ (Admin)
 
-    event ClaimSubmitted(uint claimId, address indexed claimant, string policy);
+    event ClaimSubmitted(uint claimId, address indexed claimant, string name, string policy);
     event ClaimRejected(uint claimId); // Event เมื่อคำร้องถูกปฏิเสธ
     event ClaimApproved(uint claimId); // Event เมื่อคำร้องได้รับอนุมัติ
 
-    modifier onlyAdmin() {
-        require(msg.sender == admin, "Only admin can perform this action");
-        _;
-    }
 
-    constructor() {
-        admin = msg.sender; // ตั้งผู้สร้าง contract เป็นแอดมิน
+    constructor(address _roleManagementAddress) {
+        roleManagement = RoleManagement(_roleManagementAddress); // กำหนดผู้สร้าง Contract เป็น Admin
     }
 
     /// @notice ผู้เสียหายส่งคำร้องพร้อมแนบหลาย IPFS Hash
+    /// @param _name ชื่อผู้เสียหาย
     /// @param _policy กรมธรรม์ที่ผู้เสียหายเลือก
     /// @param _incidentDate วันที่เกิดเหตุ
     /// @param _incidentType ประเภทของเหตุการณ์
     /// @param _details รายละเอียดเพิ่มเติม
     /// @param _ipfsHashes Array ของ IPFS Hash หลักฐาน
     function submitClaim(
+        string memory _name,
         string memory _policy,
         string memory _incidentDate,
         string memory _incidentType,
         string memory _details,
         string[] memory _ipfsHashes
     ) public {
+        require(
+            roleManagement._isInUsers(msg.sender),
+            "Access denied: You are not Users"
+        );
+        require(bytes(_name).length > 0, "Name cannot be empty");
         require(bytes(_policy).length > 0, "Policy cannot be empty");
         require(bytes(_incidentType).length > 0, "Incident type cannot be empty");
         require(_ipfsHashes.length > 0, "No IPFS hashes provided");
@@ -59,6 +68,7 @@ contract CarInsuranceClaimSystem {
                 claims[claimCount] = Claim({
                     id: claimCount,
                     claimant: msg.sender,
+                    name: _name,
                     policy: _policy,
                     incidentDate: _incidentDate,
                     incidentType: _incidentType,
@@ -87,6 +97,7 @@ contract CarInsuranceClaimSystem {
         claims[claimCount] = Claim({
             id: claimCount,
             claimant: msg.sender,
+            name: _name,
             policy: _policy,
             incidentDate: _incidentDate,
             incidentType: _incidentType,
@@ -101,7 +112,7 @@ contract CarInsuranceClaimSystem {
             uploadedHashes[_ipfsHashes[i]] = true;
         }
 
-        emit ClaimSubmitted(claimCount, msg.sender, _policy);
+        emit ClaimSubmitted(claimCount, msg.sender, _name, _policy);
     }
 
     /// @notice ฟังก์ชันให้แอดมินตรวจสอบคำร้อง
@@ -110,7 +121,11 @@ contract CarInsuranceClaimSystem {
     function reviewClaim(
         uint _claimId,
         bool _approvedStatus
-    ) public onlyAdmin {
+    ) public  {
+        require(
+            roleManagement._isInAdmins(msg.sender),
+            "Access denied: You are not Admin"
+        );
         Claim storage claim = claims[_claimId];
         require(claim.status == ClaimStatus.Pending, "Claim is not in pending state");
 
@@ -128,6 +143,7 @@ contract CarInsuranceClaimSystem {
         view
         returns (
             address claimant,
+            string memory name,
             string memory policy,
             string memory incidentDate,
             string memory incidentType,
@@ -140,6 +156,7 @@ contract CarInsuranceClaimSystem {
         Claim memory claim = claims[_claimId];
         return (
             claim.claimant,
+            claim.name,
             claim.policy,
             claim.incidentDate,
             claim.incidentType,
