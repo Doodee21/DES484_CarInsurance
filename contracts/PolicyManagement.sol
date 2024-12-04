@@ -80,11 +80,11 @@ contract PolicyManagement {
     }
 
     function isPolicyActive(uint256 policyID) public view returns (uint256 _policyID, string memory) {
-    // ตรวจสอบว่า policyID มีอยู่ใน mapping หรือไม่
-    if (policyID > 0 && policyID <= policyCount) {
-        return (_policyID, "Active"); // หาก policyID อยู่ใน mapping
-    } else {
-        return (_policyID, "Not Active"); // หาก policyID ไม่อยู่ใน mapping
+
+        if (policyID > 0 && policyID <= policyCount) {
+            return (_policyID, "Active");
+        } else {
+            return (_policyID, "Not Active");
+        }
     }
-}
 }
