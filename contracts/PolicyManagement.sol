@@ -87,16 +87,16 @@ contract PolicyManagement {
         );
     }
 
-    function isPolicyActive(uint256 policyID) public view returns (uint256 _policyID, string memory) {
+    function isPolicyActive(uint256 policyID) public view returns (uint256 policy_ID, string memory) {
         require(
             roleManagement._isInAdmins(msg.sender),
             "Access denied: You are not Admin"
         );
 
         if (policyID > 0 && policyID <= policyCount) {
-            return (_policyID, "Active");
+            return (policyID, "Active");
         } else {
-            return (_policyID, "Not Active");
+            return (policyID, "Not Active");
         }
     }
 
