@@ -11,29 +11,28 @@ contract CarInsuranceClaimSystem {
     PolicyManagement policyManagement;
     CarInsurancePayoutSystem carInsurancePayoutSystem;
 
-    enum ClaimStatus { Pending, Approved, Rejected } // สถานะคำร้อง
+    enum ClaimStatus { Pending, Approved, Rejected }
 
     struct Claim {
-        uint id; // หมายเลขคำร้อง
-        address claimant; // ผู้เสียหายที่ส่งคำร้อง
-        string name; // ชื่อของผู้ยื่นคำร้อง
-        string policy; // ประเภทกรมธรรม์
-        string incidentDate; // วันที่เกิดเหตุ
-        string details; // รายละเอียดเพิ่มเติม
-        ClaimStatus status; // Pending, Approved, Rejected
-        string[] cover; // ประเภทความเสียหาย (เช่น "Own Damage", "Theft", etc.)
-        string[] ipfsHashes; // Array ของ IPFS Hash หลักฐาน
-        uint timestamp; // เวลาที่ส่งคำร้อง
+        uint id;
+        address claimant;
+        string name;
+        string policy;
+        string incidentDate;
+        string details;
+        ClaimStatus status;
+        string[] cover;
+        string[] ipfsHashes;
+        uint timestamp;
     }
 
-    mapping(uint => Claim) public claims; // เก็บคำร้อง
-    uint public claimCount; // จำนวนคำร้องทั้งหมด
-    mapping(string => bool) public uploadedHashes; // เก็บ Hash ที่เคยอัปโหลดแล้ว
+    mapping(uint => Claim) public claims;
+    uint public claimCount;
+    mapping(string => bool) public uploadedHashes;
 
     event ClaimSubmitted(uint claimId, address indexed claimant, string name, string policy);
-    event ClaimRejected(uint claimId); // Event เมื่อคำร้องถูกปฏิเสธ
-    event ClaimApproved(uint claimId); // Event เมื่อคำร้องได้รับอนุมัติ
-
+    event ClaimRejected(uint claimId);
+    event ClaimApproved(uint claimId);
 
     constructor(address _roleManagementAddress, address _policyManagementAddress, address _carInsurancePayoutSystemAddress) {
         roleManagement = RoleManagement(_roleManagementAddress);
@@ -41,7 +40,6 @@ contract CarInsuranceClaimSystem {
         carInsurancePayoutSystem =  CarInsurancePayoutSystem(_carInsurancePayoutSystemAddress);
     }
 
-    
     function submitClaim(
         string memory _name,
         string memory _policy,
@@ -51,15 +49,14 @@ contract CarInsuranceClaimSystem {
         string[] memory _ipfsHashes
     ) public {
         require(
-            roleManagement._isInUsers(msg.sender),
-            "Access denied: You are not Users"
+            roleManagement.hasRole(roleManagement.POLICY_HOLDER_ROLE(), msg.sender),
+            "Access denied: You are not a Policy Holder"
         );
         require(bytes(_name).length > 0, "Name cannot be empty");
         require(bytes(_policy).length > 0, "Policy cannot be empty");
         require(_cover.length > 0, "Cover cannot be empty");
         require(_ipfsHashes.length > 0, "No IPFS hashes provided");
 
-        // ตรวจสอบว่าแต่ละ Hash ซ้ำหรือไม่
         for (uint i = 0; i < _ipfsHashes.length; i++) {
             if (uploadedHashes[_ipfsHashes[i]]) {
                 claimCount++;
@@ -70,7 +67,7 @@ contract CarInsuranceClaimSystem {
                     policy: _policy,
                     incidentDate: _incidentDate,
                     details: _details,
-                    status: ClaimStatus.Rejected, // ปฏิเสธอัตโนมัติ
+                    status: ClaimStatus.Rejected,
                     cover: _cover,
                     ipfsHashes: _ipfsHashes,
                     timestamp: block.timestamp
@@ -81,22 +78,18 @@ contract CarInsuranceClaimSystem {
             }
         }
 
-        // เพิ่มค่า claimCount ก่อนบันทึกคำร้อง
         claimCount++;
-        ClaimStatus initialStatus = ClaimStatus.Pending; // สถานะเริ่มต้น
+        ClaimStatus initialStatus = ClaimStatus.Pending;
 
-        // ตรวจสอบว่า "Own Damage" อยู่ใน Cover เพื่ออนุมัติอัตโนมัติ
         for (uint i = 0; i < _cover.length; i++) {
             if (keccak256(abi.encodePacked(_cover[i])) == keccak256(abi.encodePacked("Own Damage"))) {
-                initialStatus = ClaimStatus.Approved; // เปลี่ยนสถานะเป็น Approved
-                emit ClaimApproved(claimCount); // ส่ง Event ว่าได้รับอนุมัติ
-                carInsurancePayoutSystem.triggerPayout(claimCount, msg.sender); // 🔥 Trigger Payout
+                initialStatus = ClaimStatus.Approved;
+                emit ClaimApproved(claimCount);
+                carInsurancePayoutSystem.triggerPayout(claimCount, msg.sender);
                 break;
             }
         }
 
-
-        // บันทึกคำร้องใหม่
         claims[claimCount] = Claim({
             id: claimCount,
             claimant: msg.sender,
@@ -104,13 +97,12 @@ contract CarInsuranceClaimSystem {
             policy: _policy,
             incidentDate: _incidentDate,
             details: _details,
-            status: initialStatus, // ใช้สถานะจาก initialStatus
+            status: initialStatus,
             cover: _cover,
             ipfsHashes: _ipfsHashes,
             timestamp: block.timestamp
         });
 
-        // บันทึก Hash ทุกตัวลงระบบ
         for (uint i = 0; i < _ipfsHashes.length; i++) {
             uploadedHashes[_ipfsHashes[i]] = true;
         }
@@ -123,7 +115,7 @@ contract CarInsuranceClaimSystem {
         bool _approvedStatus
     ) public  {
         require(
-            roleManagement._isInAdmins(msg.sender),
+            roleManagement.hasRole(roleManagement.ADMIN_ROLE(), msg.sender),
             "Access denied: You are not Admin"
         );
         Claim storage claim = claims[_claimId];
@@ -132,14 +124,13 @@ contract CarInsuranceClaimSystem {
         if (_approvedStatus) {
             claim.status = ClaimStatus.Approved;
             emit ClaimApproved(_claimId);
-            carInsurancePayoutSystem.triggerPayout(_claimId, claim.claimant); // Trigger Payout
+            carInsurancePayoutSystem.triggerPayout(_claimId, claim.claimant);
         } else {
             claim.status = ClaimStatus.Rejected;
             emit ClaimRejected(_claimId);
         }
     }
 
- 
     function viewClaimStatus(uint _claimId)
         public
         view

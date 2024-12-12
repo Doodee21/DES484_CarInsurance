@@ -20,13 +20,13 @@ contract CarInsurancePayoutSystem {
     }
 
     modifier onlyAdmin() {
-        require(roleManagement._isInAdmins(msg.sender), "Access denied: You are not an Admin");
+        require(roleManagement.hasRole(roleManagement.ADMIN_ROLE(), msg.sender), "Access denied: You are not an Admin");
         _;
     }
 
     function triggerPayout(uint _claimId, address claimant) external {
         require(
-            roleManagement._isInAdmins(msg.sender) || msg.sender == address(carInsuranceClaimSystem), 
+            roleManagement.hasRole(roleManagement.ADMIN_ROLE(), msg.sender) || msg.sender == address(carInsuranceClaimSystem), 
             "Access denied: Unauthorized source"
         );
         _payoutToUser(claimant, _claimId);
