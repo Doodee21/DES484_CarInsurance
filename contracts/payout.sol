@@ -1,35 +1,46 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.19;
 
+import "./PremiumCollection.sol";
 import "./claims.sol";
+import "./RoleManagement.sol";
 
-contract CarInsurancePayoutDistribution {
-    CarInsuranceClaimProcessing claimProcessing;
+contract CarInsurancePayoutSystem {
 
-    constructor(address _claimProcessingAddress) {
-        claimProcessing = CarInsuranceClaimProcessing(_claimProcessingAddress);
+    PremiumCollection private premiumCollection;
+    CarInsuranceClaimSystem private carInsuranceClaimSystem;
+
+    event PayoutIssued(uint claimId, address indexed claimant, uint256 amount);
+
+    constructor(address _premiumCollectionAddress, address _carInsuranceClaimSystemAddress) {
+        premiumCollection = PremiumCollection(_premiumCollectionAddress);
+        carInsuranceClaimSystem = CarInsuranceClaimSystem(_carInsuranceClaimSystemAddress);
     }
 
-    function distributePayout(uint _claimId, address payable _claimant) public {
-        (bool processed, bool approved, , uint damageAmount) = claimProcessing.viewClaimStatus(_claimId);
+    function triggerPayout(uint _claimId, address claimant) external {
+        require(msg.sender == address(carInsuranceClaimSystem), "Access denied: Unauthorized source");
 
-        require(processed, "Claim not processed");
-        require(approved, "Claim not approved");
-
-        uint payoutAmount = calculatePayout(damageAmount);
-        _claimant.transfer(payoutAmount);
+        _payoutToUser(claimant, _claimId);
     }
 
-    function calculatePayout(uint damageAmount) internal pure returns (uint) {
-        return damageAmount; // Use the damage amount as the payout
+    function _payoutToUser(address user, uint _claimId) internal {
+        uint256 poolBalance = premiumCollection.getPoolBalance();
+        require(poolBalance > 0, "Insufficient pool balance");
+
+        uint256 payoutAmount = calculatePayout(user);
+        require(payoutAmount > 0, "Payout amount must be greater than zero");
+
+        premiumCollection.payOut(user, payoutAmount);
+        emit PayoutIssued(_claimId, user, payoutAmount);
     }
 
-    function checkPayoutStatus(uint /* _claimId */) public pure returns (bool) {
-        // Placeholder logic for checking payout status
-        return true; // You might implement a proper logic later
-    }
+    function calculatePayout(address user) public view returns (uint256) {
+        uint256 coverageLimit = premiumCollection.policyManagement().getUserCoverageLimit(user);
+        
+        uint256 minRange = coverageLimit / 10; // 10%
+        uint256 maxRange = coverageLimit / 2;  // 50%
 
-    function getTotalPayouts() public view returns (uint) {
-        return address(this).balance; // Placeholder for total payouts
+        uint256 payoutAmount = (maxRange + minRange) / 2; // Example logic to calculate payout as the midpoint of the range
+        return payoutAmount;
     }
 }
