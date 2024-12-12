@@ -1,6 +1,7 @@
 const RoleManagement = artifacts.require("RoleManagement");
 const PolicyManagement = artifacts.require("PolicyManagement");
 const PremiumCollection = artifacts.require("PremiumCollection");
+const CarInsuranceClaimSystem = artifacts.require("CarInsuranceClaimSystem");
 
 module.exports = async function (deployer, network, accounts) {
   // Step 1: Deploy RoleManagement contract
@@ -21,4 +22,10 @@ module.exports = async function (deployer, network, accounts) {
   const premiumCollectionInstance = await PremiumCollection.deployed();
 
   console.log("✅ PremiumCollection deployed at:", premiumCollectionInstance.address);
+
+  // Step 4: Deploy CarInsuranceClaimSystem contract with RoleManagement and PolicyManagement addresses
+  await deployer.deploy(CarInsuranceClaimSystem, roleManagementInstance.address, policyManagementInstance.address);
+  const carInsuranceClaimSystemInstance = await CarInsuranceClaimSystem.deployed();
+
+  console.log("✅ CarInsuranceClaimSystem deployed at:", carInsuranceClaimSystemInstance.address);
 };
