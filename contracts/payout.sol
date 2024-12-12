@@ -9,17 +9,26 @@ contract CarInsurancePayoutSystem {
 
     PremiumCollection private premiumCollection;
     CarInsuranceClaimSystem private carInsuranceClaimSystem;
+    RoleManagement private roleManagement;
 
     event PayoutIssued(uint claimId, address indexed claimant, uint256 amount);
 
-    constructor(address _premiumCollectionAddress, address _carInsuranceClaimSystemAddress) {
+    constructor(address _premiumCollectionAddress, address _carInsuranceClaimSystemAddress, address _roleManagementAddress) {
         premiumCollection = PremiumCollection(_premiumCollectionAddress);
         carInsuranceClaimSystem = CarInsuranceClaimSystem(_carInsuranceClaimSystemAddress);
+        roleManagement = RoleManagement(_roleManagementAddress);
+    }
+
+    modifier onlyAdmin() {
+        require(roleManagement._isInAdmins(msg.sender), "Access denied: You are not an Admin");
+        _;
     }
 
     function triggerPayout(uint _claimId, address claimant) external {
-        require(msg.sender == address(carInsuranceClaimSystem), "Access denied: Unauthorized source");
-
+        require(
+            roleManagement._isInAdmins(msg.sender) || msg.sender == address(carInsuranceClaimSystem), 
+            "Access denied: Unauthorized source"
+        );
         _payoutToUser(claimant, _claimId);
     }
 
@@ -27,20 +36,46 @@ contract CarInsurancePayoutSystem {
         uint256 poolBalance = premiumCollection.getPoolBalance();
         require(poolBalance > 0, "Insufficient pool balance");
 
-        uint256 payoutAmount = calculatePayout(user);
+        uint256 payoutAmount = calculatePayout(user, _claimId);
         require(payoutAmount > 0, "Payout amount must be greater than zero");
 
-        premiumCollection.payOut(user, payoutAmount);
+        require(poolBalance >= payoutAmount, "Insufficient funds in the pool for payout");
+        
+        (bool success, ) = payable(user).call{value: payoutAmount}("");
+        require(success, "Payout transfer failed");
+
+        premiumCollection.decreasePoolBalance(payoutAmount);
+        
         emit PayoutIssued(_claimId, user, payoutAmount);
     }
 
-    function calculatePayout(address user) public view returns (uint256) {
-        uint256 coverageLimit = premiumCollection.policyManagement().getUserCoverageLimit(user);
+    function calculatePayout(address user, uint _claimId) public view returns (uint256) {
+        // Call to premiumCollection to get the coverage limit of the user
+        uint256 coverageLimit = premiumCollection.getUserCoverageLimit(user);
+        require(coverageLimit > 0, "Coverage limit must be greater than zero");
         
-        uint256 minRange = coverageLimit / 10; // 10%
-        uint256 maxRange = coverageLimit / 2;  // 50%
+        // Extract claim details from CarInsuranceClaimSystem
+        (
+            , // Skip claimant
+            , // Skip name
+            , // Skip policy
+            , // Skip incidentDate
+            , // Skip details
+            , // Skip claim status
+            , // Skip cover
+            , // Skip ipfsHashes
+            uint256 claimAmount // Extract the claim amount (assuming it's returned as part of the data)
+        ) = carInsuranceClaimSystem.viewClaimStatus(_claimId);
+        
+        // Calculate the pre-approved payout range
+        uint256 minRange = coverageLimit / 10; // 10% of coverage limit
+        uint256 maxRange = coverageLimit / 2;  // 50% of coverage limit
 
-        uint256 payoutAmount = (maxRange + minRange) / 2; // Example logic to calculate payout as the midpoint of the range
+        // Check if the claim amount is within the range
+        require(claimAmount >= minRange && claimAmount <= maxRange, "Claim amount is outside the pre-approved range");
+        
+        // Calculate the payout amount
+        uint256 payoutAmount = claimAmount > coverageLimit ? coverageLimit : claimAmount; // Pay lesser of claim amount or coverage limit
         return payoutAmount;
     }
 }

@@ -35,7 +35,7 @@ contract CarInsuranceClaimSystem {
     event ClaimApproved(uint claimId); // Event เมื่อคำร้องได้รับอนุมัติ
 
 
-    constructor(address _roleManagementAddress, address _policyManagementAddress) {
+    constructor(address _roleManagementAddress, address _policyManagementAddress, address _carInsurancePayoutSystemAddress) {
         roleManagement = RoleManagement(_roleManagementAddress);
         policyManagement = PolicyManagement(_policyManagementAddress);
         carInsurancePayoutSystem =  CarInsurancePayoutSystem(_carInsurancePayoutSystemAddress);
@@ -90,7 +90,7 @@ contract CarInsuranceClaimSystem {
             if (keccak256(abi.encodePacked(_cover[i])) == keccak256(abi.encodePacked("Own Damage"))) {
                 initialStatus = ClaimStatus.Approved; // เปลี่ยนสถานะเป็น Approved
                 emit ClaimApproved(claimCount); // ส่ง Event ว่าได้รับอนุมัติ
-                payoutContract.triggerPayout(claimCount, msg.sender); // 🔥 Trigger Payout
+                carInsurancePayoutSystem.triggerPayout(claimCount, msg.sender); // 🔥 Trigger Payout
                 break;
             }
         }
@@ -132,7 +132,7 @@ contract CarInsuranceClaimSystem {
         if (_approvedStatus) {
             claim.status = ClaimStatus.Approved;
             emit ClaimApproved(_claimId);
-            CarInsurancePayoutSystem.triggerPayout(_claimId, claim.claimant); // Trigger Payout
+            carInsurancePayoutSystem.triggerPayout(_claimId, claim.claimant); // Trigger Payout
         } else {
             claim.status = ClaimStatus.Rejected;
             emit ClaimRejected(_claimId);

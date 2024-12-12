@@ -63,20 +63,20 @@ contract PremiumCollection {
     }
 
     function paidPremium(address user, uint256 policyID) public view returns (bool) {
-    require(
-        roleManagement._isInUsers(msg.sender) || roleManagement._isInAdmins(msg.sender),
-        "Access denied: You are not a User or Admin"
-    );
+        require(
+            roleManagement._isInUsers(msg.sender) || roleManagement._isInAdmins(msg.sender),
+            "Access denied: You are not a User or Admin"
+        );
 
-    Premium[] storage premiums = userPremiums[user];
-    for (uint256 i = 0; i < premiums.length; i++) {
-        if (premiums[i].policyID == policyID) {
-            return premiums[i].amountPaid > 0;
+        Premium[] storage premiums = userPremiums[user];
+        for (uint256 i = 0; i < premiums.length; i++) {
+            if (premiums[i].policyID == policyID) {
+                return premiums[i].amountPaid > 0;
+            }
         }
-    }
 
-    revert("Premium not found for this policy ID");
-}
+        revert("Premium not found for this policy ID");
+    }
 
     function payPremium(uint256 policyID) public payable {
         require(
@@ -145,4 +145,23 @@ contract PremiumCollection {
 
         require(resetDone, "Policy not found or premium not set");
     }
+
+    function decreasePoolBalance(uint256 amount) public {
+        require(
+            roleManagement._isInAdmins(msg.sender),
+            "Access denied: You are not Admin"
+        );
+        require(poolBalance >= amount, "Insufficient pool balance");
+        poolBalance -= amount;
+        emit PoolBalanceUpdated(poolBalance);
+    }
+
+    function getUserCoverageLimit(address user) public view returns (uint256) {
+    require(
+        roleManagement._isInAdmins(msg.sender),
+        "Access denied: You are not Admin"
+    );
+    return getUserCoverageLimit(user);
+}
+
 }

@@ -24,15 +24,17 @@ module.exports = async function (deployer, network, accounts) {
 
   console.log("✅ PremiumCollection deployed at:", premiumCollectionInstance.address);
 
-  // Step 4: Deploy CarInsuranceClaimSystem contract with RoleManagement and PolicyManagement addresses
-  await deployer.deploy(CarInsuranceClaimSystem, roleManagementInstance.address, policyManagementInstance.address);
-  const carInsuranceClaimSystemInstance = await CarInsuranceClaimSystem.deployed();
-
-  console.log("✅ CarInsuranceClaimSystem deployed at:", carInsuranceClaimSystemInstance.address);
-
-  // Step 5: Deploy CarInsurancePayoutSystem contract with PremiumCollection and CarInsuranceClaimSystem addresses
-  await deployer.deploy(CarInsurancePayoutSystem, premiumCollectionInstance.address, carInsuranceClaimSystemInstance.address);
+  // Step 4: Deploy CarInsurancePayoutSystem BEFORE CarInsuranceClaimSystem
+  // Pass RoleManagement and PolicyManagement addresses to CarInsurancePayoutSystem
+  await deployer.deploy(CarInsurancePayoutSystem, premiumCollectionInstance.address, roleManagementInstance.address, policyManagementInstance.address);
   const carInsurancePayoutSystemInstance = await CarInsurancePayoutSystem.deployed();
 
   console.log("✅ CarInsurancePayoutSystem deployed at:", carInsurancePayoutSystemInstance.address);
+
+  // Step 5: Deploy CarInsuranceClaimSystem AFTER CarInsurancePayoutSystem
+  // Pass RoleManagement, PolicyManagement, and CarInsurancePayoutSystem addresses to CarInsuranceClaimSystem
+  await deployer.deploy(CarInsuranceClaimSystem, roleManagementInstance.address, policyManagementInstance.address, carInsurancePayoutSystemInstance.address);
+  const carInsuranceClaimSystemInstance = await CarInsuranceClaimSystem.deployed();
+
+  console.log("✅ CarInsuranceClaimSystem deployed at:", carInsuranceClaimSystemInstance.address);
 };
