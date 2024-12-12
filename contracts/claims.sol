@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
+import "./payout.sol";
 import "./RoleManagement.sol";
 import "./PolicyManagement.sol";
 
@@ -8,6 +9,7 @@ contract CarInsuranceClaimSystem {
 
     RoleManagement roleManagement;
     PolicyManagement policyManagement;
+    CarInsurancePayoutSystem carInsurancePayoutSystem;
 
     enum ClaimStatus { Pending, Approved, Rejected } // สถานะคำร้อง
 
@@ -36,9 +38,10 @@ contract CarInsuranceClaimSystem {
     constructor(address _roleManagementAddress, address _policyManagementAddress) {
         roleManagement = RoleManagement(_roleManagementAddress);
         policyManagement = PolicyManagement(_policyManagementAddress);
+        carInsurancePayoutSystem =  CarInsurancePayoutSystem(_carInsurancePayoutSystemAddress);
     }
 
-    /// @notice ผู้เสียหายส่งคำร้องพร้อมแนบหลาย IPFS Hash
+    
     function submitClaim(
         string memory _name,
         string memory _policy,
@@ -87,9 +90,11 @@ contract CarInsuranceClaimSystem {
             if (keccak256(abi.encodePacked(_cover[i])) == keccak256(abi.encodePacked("Own Damage"))) {
                 initialStatus = ClaimStatus.Approved; // เปลี่ยนสถานะเป็น Approved
                 emit ClaimApproved(claimCount); // ส่ง Event ว่าได้รับอนุมัติ
+                payoutContract.triggerPayout(claimCount, msg.sender); // 🔥 Trigger Payout
                 break;
             }
         }
+
 
         // บันทึกคำร้องใหม่
         claims[claimCount] = Claim({
@@ -113,7 +118,6 @@ contract CarInsuranceClaimSystem {
         emit ClaimSubmitted(claimCount, msg.sender, _name, _policy);
     }
 
-    /// @notice ฟังก์ชันให้แอดมินตรวจสอบคำร้อง
     function reviewClaim(
         uint _claimId,
         bool _approvedStatus
@@ -128,13 +132,14 @@ contract CarInsuranceClaimSystem {
         if (_approvedStatus) {
             claim.status = ClaimStatus.Approved;
             emit ClaimApproved(_claimId);
+            CarInsurancePayoutSystem.triggerPayout(_claimId, claim.claimant); // Trigger Payout
         } else {
             claim.status = ClaimStatus.Rejected;
             emit ClaimRejected(_claimId);
         }
     }
 
-    /// @notice View claim status
+ 
     function viewClaimStatus(uint _claimId)
         public
         view
